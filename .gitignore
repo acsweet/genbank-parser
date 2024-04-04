@@ -1,0 +1,7 @@
+/target
+.DS_Store
+
+# misc outputs
+proteins.json
+sequences.json
+*.seq
