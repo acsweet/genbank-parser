@@ -1,5 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use genbank_parser::{parse_sequence_record, parse_sequence_record_by_positions};
+use genbank_parser::{
+    faster::parse_new_features, faster::parse_new_sequence_record, parse_features,
+    parse_sequence_record, parse_sequence_record_by_positions,
+};
 
 fn test_parse_sequence_record_by_positions(record: &[u8]) {
     _ = parse_sequence_record_by_positions(record);
@@ -9,7 +12,57 @@ fn test_parse_sequence_record(record: &[u8]) {
     (_, _) = parse_sequence_record(record);
 }
 
+fn test_parse_new_sequence_record(record: &[u8]) {
+    (_, _) = parse_new_sequence_record(record);
+}
+
+fn test_parse_features(data: &[u8]) {
+    let feature_lines = data.split(|&b| b == b'\n');
+    _ = parse_features(feature_lines);
+}
+
+fn test_parse_new_features(data: &[u8]) {
+    let feature_lines = data.split(|&b| b == b'\n');
+    _ = parse_new_features(feature_lines);
+}
+
 fn alignment_benchmark(c: &mut Criterion) {
+    let features: &[u8] = black_box(
+        b"
+     source          1..674
+                     /organism=\"Influenza A virus (A/Sendai/TU65/2006(H1N1))\"
+                     /mol_type=\"viral cRNA\"
+                     /strain=\"A/Sendai/TU65/2008\"
+                     /serotype=\"H1N1\"
+                     /isolate=\"laboratory strain 4\"
+                     /host=\"Homo sapiens\"
+                     /db_xref=\"taxon:672336\"
+                     /segment=\"7\"
+                     /lab_host=\"Canis lupus familiaris MDCK cells\"
+                     /country=\"Japan: Miyagi, Sendai\"
+                     /note=\"This virus is laboratory strain. The virus was
+                     cultured in MDCK cells in the presence of amantadine after
+                     plaque-purification.\"
+     gene            <1..440
+                     /gene=\"M1\"
+     CDS             <1..440
+                     /gene=\"M1\"
+                     /codon_start=3
+                     /product=\"matrix protein 1\"
+                     /protein_id=\"BAI79497.1\"
+                     /translation=\"TFHGAKEIALSYSAGALASCMGLIYNRMGAVTTESAFGLICATC
+                     EQIADSQHKSHRQMVTTTNPLIRHENRMVLASTTAKAMEQMAGSSEQAAEAMEVASQA
+                     RQMVQAMRAIGTHPSSSTGLKNDLLENLQAYQKRMGVQMQRFK\"
+     gene            <396..663
+                     /gene=\"M2\"
+     CDS             <396..663
+                     /gene=\"M2\"
+                     /codon_start=2
+                     /product=\"matrix protein 2\"
+                     /protein_id=\"BAI79498.1\"
+                     /translation=\"PIRNEWGCRCNDSSDPLVVAASIIEIVHLILWIIDRLFSKSICR
+                     IFKHGLKRGPSTEGIPESMREEYREEQRNAVDADDDHFVSIELE\"",
+    );
     let genbank_record = black_box(
         b"LOCUS       AB000048                2007 bp    DNA     linear   VRL 14-JUL-2009
 DEFINITION  Feline panleukopenia virus gene for nonstructural protein 1,
@@ -93,12 +146,20 @@ ORIGIN
      1981 gaagattttc gagacgactt ggattaa
 //",
     );
-
     c.bench_function("test parse_sequence_record_by_positions", |b| {
         b.iter(|| test_parse_sequence_record_by_positions(genbank_record))
     });
     c.bench_function("test parse_sequence_record", |b| {
         b.iter(|| test_parse_sequence_record(genbank_record))
+    });
+    c.bench_function("test parse_new_sequence_record", |b| {
+        b.iter(|| test_parse_new_sequence_record(genbank_record))
+    });
+    c.bench_function("test parse_features", |b| {
+        b.iter(|| test_parse_features(features))
+    });
+    c.bench_function("test parse_new_features", |b| {
+        b.iter(|| test_parse_new_features(features))
     });
 }
 

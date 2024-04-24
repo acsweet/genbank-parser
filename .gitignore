@@ -2,6 +2,8 @@
 .DS_Store
 
 # misc outputs
-proteins.json
-sequences.json
+proteins*.json
+sequences*.json
 *.seq
+*.arrow
+*.csv

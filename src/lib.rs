@@ -1,54 +1,114 @@
-use serde::{ser::Error, Serialize, Serializer};
 use std::fmt;
+pub mod faster;
+use crate::faster::parse_new_features;
+use arrow::array::StringArray;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::ipc::writer::FileWriter;
+use arrow::record_batch::RecordBatch;
+use std::fs::File;
+use std::sync::Arc;
 
-#[inline]
-fn serialize_as_utf8<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let string = std::str::from_utf8(bytes).map_err(S::Error::custom)?;
-    serializer.serialize_str(string)
+pub trait ArrowVec {
+    fn create_schema() -> Schema;
+    fn create_record_batch(&self, schema: Schema) -> RecordBatch;
 }
 
-#[derive(Debug, Serialize)]
+pub fn write_arrow_file<T: ArrowVec>(
+    records: &T,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let schema = T::create_schema();
+    let record_batch = records.create_record_batch(schema.clone());
+
+    let file = File::create(output_path)?;
+    let mut writer = FileWriter::try_new(file, &schema)?;
+    writer.write(&record_batch)?;
+    writer.finish()?;
+
+    Ok(())
+}
+
+fn to_string_array(data: &[&Vec<u8>]) -> Arc<dyn arrow::array::Array> {
+    let array = StringArray::from_iter_values(data.iter().map(|v| std::str::from_utf8(v).unwrap()));
+    Arc::new(array)
+}
+
+#[derive(Debug)]
 pub struct Sequence {
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub version: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub definition: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub organism: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub taxonomy: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub sequence: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub host: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub mol_type: Vec<u8>,
 }
 
 impl Sequence {
-    fn append_data(&mut self, data_type: &DataType, data: &[u8]) {
+    fn new() -> Sequence {
+        Sequence {
+            version: Vec::new(),
+            definition: Vec::new(),
+            taxonomy: Vec::new(),
+            organism: Vec::new(),
+            sequence: Vec::new(),
+            host: Vec::new(),
+            mol_type: Vec::new(),
+        }
+    }
+
+    fn append_data(&mut self, data_type: &SequnceDataType, data: &[u8]) {
         match data_type {
-            DataType::Definition => self.definition.extend_from_slice(data),
-            DataType::Version => self.version.extend_from_slice(data),
-            DataType::Taxonomy => self.taxonomy.extend_from_slice(data),
-            DataType::Organism => self.organism.extend_from_slice(data),
+            SequnceDataType::Definition => self.definition.extend_from_slice(data),
+            SequnceDataType::Version => self.version.extend_from_slice(data),
+            SequnceDataType::Taxonomy => self.taxonomy.extend_from_slice(data),
+            SequnceDataType::Organism => self.organism.extend_from_slice(data),
             _ => (),
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+impl ArrowVec for Vec<Sequence> {
+    fn create_schema() -> Schema {
+        let fields = vec![
+            Field::new("version", DataType::Utf8, false),
+            Field::new("definition", DataType::Utf8, false),
+            Field::new("organism", DataType::Utf8, false),
+            Field::new("taxonomy", DataType::Utf8, false),
+            Field::new("sequence", DataType::Utf8, false),
+            Field::new("host", DataType::Utf8, false),
+            Field::new("mol_type", DataType::Utf8, false),
+        ];
+        Schema::new(fields)
+    }
+
+    fn create_record_batch(&self, schema: Schema) -> RecordBatch {
+        let version = to_string_array(&self.iter().map(|s| &s.version).collect::<Vec<_>>());
+        let definition = to_string_array(&self.iter().map(|s| &s.definition).collect::<Vec<_>>());
+        let organism = to_string_array(&self.iter().map(|s| &s.organism).collect::<Vec<_>>());
+        let taxonomy = to_string_array(&self.iter().map(|s| &s.taxonomy).collect::<Vec<_>>());
+        let sequence = to_string_array(&self.iter().map(|s| &s.sequence).collect::<Vec<_>>());
+        let host = to_string_array(&self.iter().map(|s| &s.host).collect::<Vec<_>>());
+        let mol_type = to_string_array(&self.iter().map(|s| &s.mol_type).collect::<Vec<_>>());
+
+        let columns = vec![
+            Arc::new(version) as Arc<dyn arrow::array::Array>,
+            Arc::new(definition),
+            Arc::new(organism),
+            Arc::new(taxonomy),
+            Arc::new(sequence),
+            Arc::new(host),
+            Arc::new(mol_type),
+        ];
+        RecordBatch::try_new(Arc::new(schema), columns).unwrap()
+    }
+}
+
+#[derive(Debug)]
 pub struct Protein {
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub protein_id: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub source_id: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub sequence: Vec<u8>,
-    #[serde(serialize_with = "serialize_as_utf8")]
     pub location: Vec<u8>,
 }
 
@@ -63,8 +123,35 @@ impl Protein {
     }
 }
 
+impl ArrowVec for Vec<Protein> {
+    fn create_schema() -> Schema {
+        let fields = vec![
+            Field::new("protein_id", DataType::Utf8, false),
+            Field::new("source_id", DataType::Utf8, false),
+            Field::new("sequence", DataType::Utf8, false),
+            Field::new("location", DataType::Utf8, false),
+        ];
+        Schema::new(fields)
+    }
+
+    fn create_record_batch(&self, schema: Schema) -> RecordBatch {
+        let protein_id = to_string_array(&self.iter().map(|s| &s.protein_id).collect::<Vec<_>>());
+        let source_id = to_string_array(&self.iter().map(|s| &s.source_id).collect::<Vec<_>>());
+        let sequence = to_string_array(&self.iter().map(|s| &s.sequence).collect::<Vec<_>>());
+        let location = to_string_array(&self.iter().map(|s| &s.location).collect::<Vec<_>>());
+
+        let columns = vec![
+            Arc::new(protein_id) as Arc<dyn arrow::array::Array>,
+            Arc::new(source_id),
+            Arc::new(sequence),
+            Arc::new(location),
+        ];
+        RecordBatch::try_new(Arc::new(schema), columns).unwrap()
+    }
+}
+
 #[derive(Debug)]
-struct Feature {
+pub struct Feature {
     feature_type: Option<FeatureType>,
     location: Vec<u8>,
     qualifiers: Vec<(Vec<u8>, Vec<u8>)>,
@@ -99,7 +186,7 @@ impl fmt::Display for Feature {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum FeatureType {
+pub enum FeatureType {
     Source,
     Gene,
     CDS,
@@ -130,7 +217,7 @@ impl fmt::Display for FeatureType {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum DataType {
+enum SequnceDataType {
     Definition,
     Version,
     Organism,
@@ -141,7 +228,7 @@ enum DataType {
     Other,
 }
 
-impl DataType {
+impl SequnceDataType {
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
         match trim_ascii(bytes) {
             b"" => None,
@@ -156,7 +243,7 @@ impl DataType {
     }
 
     fn is_data_complete(&self) -> bool {
-        matches!(self, DataType::Origin | DataType::Other) // Feature?
+        matches!(self, SequnceDataType::Origin | SequnceDataType::Other) // Feature?
     }
 }
 
@@ -204,14 +291,20 @@ pub fn split_on_delimiter<'a>(
 
 #[inline]
 fn remove_quotes(data: &[u8]) -> &[u8] {
-    if data.starts_with(&[b'"']) && data.ends_with(&[b'"']) && data.len() >= 2 {
-        &data[1..data.len() - 1]
+    if data.starts_with(&[b'"']) && data.len() >= 1 {
+        if data.ends_with(&[b'"']) && data.len() >= 2 {
+            &data[1..data.len() - 1]
+        } else {
+            &data[1..]
+        }
+    } else if data.ends_with(&[b'"']) && data.len() >= 1 {
+        &data[..data.len() - 1]
     } else {
         data
     }
 }
 
-fn parse_features<'a, I>(data: I) -> Result<Vec<Feature>, &'static str>
+pub fn parse_features<'a, I>(data: I) -> Result<Vec<Feature>, &'static str>
 where
     I: Iterator<Item = &'a [u8]>,
 {
@@ -285,25 +378,44 @@ where
     Ok(features)
 }
 
+fn split_at_sequence<'a>(haystack: &'a [u8], needle: &[u8]) -> Option<(&'a [u8], &'a [u8])> {
+    if needle.is_empty() {
+        return None;
+    }
+
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .map(|index| {
+            let (left, right) = haystack.split_at(index);
+            (left, &right[needle.len()..])
+        })
+}
+
 pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
     const GENBANK_INDENT: usize = 12;
     // let genbank_spacer = [b' '; GENBANK_INDENT];
 
-    let mut sequence = Sequence {
-        version: Vec::new(),
-        definition: Vec::new(),
-        taxonomy: Vec::new(),
-        organism: Vec::new(),
-        sequence: Vec::new(),
-        host: Vec::new(),
-        mol_type: Vec::new(),
-    };
-    let mut origin = Vec::new();
-    let mut features = Vec::new();
+    let mut sequence = Sequence::new();
+    // let mut origin = Vec::new();
+    // let mut features = Vec::new();
 
-    let mut lines = record.split(|&b| b == b'\n');
+    // let mut lines = record.split(|&b| b == b'\n');
 
-    let mut data_type: DataType = DataType::Other;
+    let (lines, ending_lines) = split_at_sequence(record, b"\nFEATURES").unwrap();
+    // todo: panic here if needed
+    let (feature_lines, origin_lines) = split_at_sequence(ending_lines, b"\nORIGIN").unwrap();
+    // let features = parse_features(feature_lines.split(|&b| b == b'\n'))
+    //     .expect("Failed to parse features for sequence");
+    let features = parse_new_features(feature_lines.split(|&b| b == b'\n'))
+        .expect("Failed to parse features for sequence");
+
+    sequence
+        .sequence
+        .extend(origin_lines.iter().filter(|&b| b.is_ascii_alphabetic()));
+
+    let mut data_type: SequnceDataType = SequnceDataType::Other;
+    let mut lines = lines.split(|&b| b == b'\n');
     for line in &mut lines {
         if line.len() < GENBANK_INDENT {
             panic!(
@@ -312,7 +424,7 @@ pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
             );
         }
 
-        let line_type = DataType::from_bytes(&line[..GENBANK_INDENT]);
+        let line_type = SequnceDataType::from_bytes(&line[..GENBANK_INDENT]);
         // println!("line_type: {:?}", line_type);
         match line_type {
             None => {
@@ -320,30 +432,13 @@ pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
                     sequence.append_data(&data_type, &[b' ']);
                 }
             }
-            Some(DataType::Features) => {
-                // features followed by origin
-                let feature_lines = lines
-                    .by_ref()
-                    .take_while(|slice| !slice.starts_with(b"ORIGIN")); // ORIGIN line consumed here?
-                features = parse_features(feature_lines).expect(&format!(
-                    "Failed to parse features for sequence: {:?}",
-                    String::from_utf8(sequence.version.clone())
-                ));
-
-                origin = lines
-                    .flat_map(|slice| slice)
-                    .filter(|&&b| b.is_ascii_alphabetic())
-                    .copied()
-                    .collect();
-                break;
-            }
             Some(d_type) => {
                 data_type = d_type;
             }
         }
 
-        if data_type == DataType::Organism && line.contains(&b';') {
-            data_type = DataType::Taxonomy;
+        if data_type == SequnceDataType::Organism && line.contains(&b';') {
+            data_type = SequnceDataType::Taxonomy;
         }
 
         if !data_type.is_data_complete() {
@@ -357,12 +452,14 @@ pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
         match feature.feature_type {
             Some(FeatureType::Source) => {
                 for (qualifier_name, qualifier_value) in feature.qualifiers {
-                    match qualifier_name.as_slice() {
+                    match qualifier_name {
                         b"host" | b"lab_host" => {
-                            sequence.host = qualifier_value;
+                            sequence.host =
+                                qualifier_value.iter().flat_map(|&s| s).copied().collect();
                         }
                         b"mol_type" => {
-                            sequence.mol_type = qualifier_value;
+                            sequence.mol_type =
+                                qualifier_value.iter().flat_map(|&s| s).copied().collect();
                         }
                         _ => (),
                     }
@@ -371,18 +468,22 @@ pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
             Some(FeatureType::CDS) => {
                 let mut protein = Protein::new();
                 for (qualifier_name, qualifier_value) in feature.qualifiers {
-                    match qualifier_name.as_slice() {
+                    // match qualifier_name.as_slice() {
+                    match qualifier_name {
                         b"protein_id" => {
-                            protein.protein_id = qualifier_value;
+                            // protein.protein_id = qualifier_value;
+                            protein.protein_id =
+                                qualifier_value.iter().flat_map(|&s| s).copied().collect();
                         }
                         b"translation" => {
-                            protein.sequence = qualifier_value;
+                            protein.sequence =
+                                qualifier_value.iter().flat_map(|&s| s).copied().collect();
                         }
                         _ => (),
                     }
                 }
                 if !protein.protein_id.is_empty() && !protein.sequence.is_empty() {
-                    protein.location = feature.location;
+                    protein.location = feature.location.unwrap().to_vec();
                     protein.source_id = sequence.version.clone();
                     proteins.push(protein);
                 }
@@ -390,7 +491,7 @@ pub fn parse_sequence_record(record: &[u8]) -> (Sequence, Vec<Protein>) {
             _ => (),
         }
     }
-    sequence.sequence = origin;
+    // sequence.sequence = origin;
     // println!("Num proteins: {}", proteins.len());
 
     (sequence, proteins)

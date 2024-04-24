@@ -1,5 +1,6 @@
 use genbank_parser::{
-    parse_sequence_record, parse_sequence_record_by_positions, split_on_delimiter,
+    faster::parse_new_sequence_record, parse_sequence_record, parse_sequence_record_by_positions,
+    split_on_delimiter,
 };
 
 const RECORD: &[u8] =
@@ -181,6 +182,82 @@ ORIGIN
       661 cggcctttct acagggactc tccgctgggg actctccagg gaggcgtggc ctcggcggga
       721 ctcgggagtg gcgagcctca gatgctgcat ataa";
 
+const RECORD_4: &[u8] =
+    b"LOCUS       AB520928                 674 bp    cRNA    linear   VRL 25-JUL-2016
+DEFINITION  Influenza A virus (A/Sendai/TU65/2006(H1N1)) M1, M2 genes for
+            matrix protein 1, matrix protein 2, partial cds, laboratory strain
+            4.
+ACCESSION   AB520928
+VERSION     AB520928.1
+KEYWORDS    .
+SOURCE      Influenza A virus (A/Sendai/TU65/2006(H1N1))
+  ORGANISM  Influenza A virus (A/Sendai/TU65/2006(H1N1))
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Alphainfluenzavirus; Alphainfluenzavirus
+            influenzae.
+REFERENCE   1
+  AUTHORS   Furuse,Y., Suzuki,A., Kishi,M., Nukiwa,N., Shimizu,M., Sawayama,R.,
+            Fuji,N. and Oshitani,H.
+  TITLE     Occurrence of mixed populations of influenza A viruses that can be
+            maintained through transmission in a single host and potential for
+            reassortment
+  JOURNAL   J. Clin. Microbiol. 48 (2), 369-374 (2010)
+   PUBMED   19940049
+REFERENCE   2  (bases 1 to 674)
+  AUTHORS   Furuse,Y., Suzuki,A. and Oshitani,H.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (07-SEP-2009) Contact:Yuki Furuse Tohoku University
+            Graduate School of Medicine, Department of Virology; Aoba ku
+            seiryou chou 2-1, Sendai, Miyagi 980-8575, Japan
+FEATURES             Location/Qualifiers
+     source          1..674
+                     /organism=\"Influenza A virus (A/Sendai/TU65/2006(H1N1))\"
+                     /mol_type=\"viral cRNA\"
+                     /strain=\"A/Sendai/TU65/2008\"
+                     /serotype=\"H1N1\"
+                     /isolate=\"laboratory strain 4\"
+                     /host=\"Homo sapiens\"
+                     /db_xref=\"taxon:672336\"
+                     /segment=\"7\"
+                     /lab_host=\"Canis lupus familiaris MDCK cells\"
+                     /country=\"Japan: Miyagi, Sendai\"
+                     /note=\"This virus is laboratory strain. The virus was
+                     cultured in MDCK cells in the presence of amantadine after
+                     plaque-purification.\"
+     gene            <1..440
+                     /gene=\"M1\"
+     CDS             <1..440
+                     /gene=\"M1\"
+                     /codon_start=3
+                     /product=\"matrix protein 1\"
+                     /protein_id=\"BAI79497.1\"
+                     /translation=\"TFHGAKEIALSYSAGALASCMGLIYNRMGAVTTESAFGLICATC
+                     EQIADSQHKSHRQMVTTTNPLIRHENRMVLASTTAKAMEQMAGSSEQAAEAMEVASQA
+                     RQMVQAMRAIGTHPSSSTGLKNDLLENLQAYQKRMGVQMQRFK\"
+     gene            <396..663
+                     /gene=\"M2\"
+     CDS             <396..663
+                     /gene=\"M2\"
+                     /codon_start=2
+                     /product=\"matrix protein 2\"
+                     /protein_id=\"BAI79498.1\"
+                     /translation=\"PIRNEWGCRCNDSSDPLVVAASIIEIVHLILWIIDRLFSKSICR
+                     IFKHGLKRGPSTEGIPESMREEYREEQRNAVDADDDHFVSIELE\"
+ORIGIN      
+        1 taacattcca tggggccaaa gaaatagcac tcagttattc tgctggtgca cttgccagtt
+       61 gtatgggact catatacaac aggatggggg ctgtgaccac cgaatcagca tttggcctta
+      121 tatgtgcaac ctgtgaacag attgccgact cccagcataa gtctcacagg caaatggtaa
+      181 caacaaccaa tccattaata agacatgaga acagaatggt tctggccagc actacagcta
+      241 aggctatgga gcaaatggct ggatcgagcg aacaagcagc tgaggccatg gaggttgcta
+      301 gtcaggccag gcagatggtg caggcaatga gagccattgg gactcatcct agctctagca
+      361 ctggtctgaa aaatgatctc cttgaaaatt tacaggccta tcagaaacga atgggggtgc
+      421 agatgcaacg attcaagtga tcctcttgtt gttgccgcaa gtataattga gattgtgcac
+      481 ttgatattgt ggattattga tcgccttttt tccaaaagca tttgtcgtat ctttaaacac
+      541 ggtttaaaaa gagggccttc tacggaagga ataccagagt ctatgaggga agaatatcga
+      601 gaggaacagc ggaatgctgt ggacgctgac gatgatcatt ttgtcagcat agagctagag
+      661 taaaaaacta cctt";
+
 #[test]
 #[ignore]
 fn test_parse_sequence_record_by_positions() {
@@ -263,6 +340,84 @@ fn test_parse_sequence_record_3() {
     assert_eq!(sequence.sequence, b"atgggtggcaagtggtcaaaacgtagcgaggatagatggtctaccataagggaaagaatgagacgtgcgccagcagctgagccagcagcagatggggtgggagcagcatctcgagacttggaaaaatatggcgcaatcacaagtagcaatacagcagctaccaatgctgattgtgcctggctagaagcacaagaagaggaggaggaggtgggctttccagtcagacctcaagtacctttaagaccaatgacctggaaggcagctttagatcttagccactttttaaaagaaaaggggggactggaagggctagtttactcccaaaaaagacgagatatccttgatttgtggatctaccacacacaaggcttcttccctgattggcaaaactacacaccagggccagggaccagatttccactgacctttgggtggtgcttcaagttggtaccaatggagcgagagaaaatagaagaggccaatgaaggagagaacaacagtttgttacaccctttaagccagcatgggatggatgacccggagagagaagtgttagtgtggaagtttgacagccgcctagcatttcatcacgtggctcgagagctgcatcccggagtactacaagatctgatgacaccgagcttctacaactgctgacatcggcctttctacagggactctccgctggggactctccagggaggcgtggcctcggcgggactcgggagtggcgagcctcagatgctgcatataa");
 
     assert_eq!(sequence.mol_type, b"genomic DNA");
+}
+
+#[test]
+#[ignore]
+fn test_parse_new_sequence_record() {
+    let (sequence, proteins) = parse_new_sequence_record(RECORD_3);
+    let flattened_taxonomy: Vec<u8> = sequence
+        .taxonomy
+        .iter()
+        .flat_map(|&slice| slice)
+        .copied()
+        .collect();
+    let flattened_definition: Vec<u8> = sequence
+        .definition
+        .iter()
+        .flat_map(|&slice| slice)
+        .copied()
+        .collect();
+
+    // for protein in &proteins {
+    //     println!("protein_id: {:?}", String::from_utf8(protein.protein_id.as_ref().unwrap().iter().flat_map(|&slice| slice).copied().collect()));
+    //     println!("source_id: {:?}", String::from_utf8(protein.source_id.unwrap().to_vec()));
+    //     println!("sequence: {:?}", String::from_utf8(protein.sequence.as_ref().unwrap().iter().flat_map(|&slice| slice).copied().collect()));
+    //     println!("location: {:?}", String::from_utf8(protein.location.unwrap().to_vec()));
+    // }
+
+    assert_eq!(sequence.version.unwrap(), b"AF219750.1" as &[u8]);
+    assert_eq!(flattened_taxonomy, b"Viruses; Riboviria; Pararnavirae; Artverviricota; Revtraviricetes; Ortervirales; Retroviridae; Orthoretrovirinae; Lentivirus.");
+    assert_eq!(
+        flattened_definition,
+        b"HIV-1 LTS 38d from Australia nef protein (nef) gene, complete cds."
+    );
+    assert_eq!(sequence.sequence.unwrap().iter().map(|&&x| x).collect::<Vec<u8>>(), b"atgggtggcaagtggtcaaaacgtagcgaggatagatggtctaccataagggaaagaatgagacgtgcgccagcagctgagccagcagcagatggggtgggagcagcatctcgagacttggaaaaatatggcgcaatcacaagtagcaatacagcagctaccaatgctgattgtgcctggctagaagcacaagaagaggaggaggaggtgggctttccagtcagacctcaagtacctttaagaccaatgacctggaaggcagctttagatcttagccactttttaaaagaaaaggggggactggaagggctagtttactcccaaaaaagacgagatatccttgatttgtggatctaccacacacaaggcttcttccctgattggcaaaactacacaccagggccagggaccagatttccactgacctttgggtggtgcttcaagttggtaccaatggagcgagagaaaatagaagaggccaatgaaggagagaacaacagtttgttacaccctttaagccagcatgggatggatgacccggagagagaagtgttagtgtggaagtttgacagccgcctagcatttcatcacgtggctcgagagctgcatcccggagtactacaagatctgatgacaccgagcttctacaactgctgacatcggcctttctacagggactctccgctggggactctccagggaggcgtggcctcggcgggactcgggagtggcgagcctcagatgctgcatataa");
+    assert_eq!(1, proteins.len());
+}
+
+#[test]
+fn test_parse_new_record_multiple_proteins() {
+    let (sequence, proteins) = parse_new_sequence_record(RECORD_4);
+
+    println!("Num proteins: {}", proteins.len());
+    for protein in &proteins {
+        println!(
+            "protein_id: {:?}",
+            String::from_utf8(
+                protein
+                    .protein_id
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|&slice| slice)
+                    .copied()
+                    .collect()
+            )
+        );
+        println!(
+            "source_id: {:?}",
+            String::from_utf8(protein.source_id.unwrap().to_vec())
+        );
+        println!(
+            "sequence: {:?}",
+            String::from_utf8(
+                protein
+                    .sequence
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|&slice| slice)
+                    .copied()
+                    .collect()
+            )
+        );
+        println!(
+            "location: {:?}",
+            String::from_utf8(protein.location.unwrap().to_vec())
+        );
+    }
+    assert_eq!(sequence.version.unwrap(), b"AB520928.1" as &[u8]);
 }
 
 #[test]
