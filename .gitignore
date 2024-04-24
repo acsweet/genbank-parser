@@ -4,6 +4,7 @@
 # misc outputs
 proteins*.json
 sequences*.json
+nucleotides*.json
 *.seq
 *.arrow
 *.csv
