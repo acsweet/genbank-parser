@@ -8,10 +8,10 @@
     - e.g. <code>.genbank-parser path/to/gbvrl1.seq</code> or <code>.genbank-parser path/to/files/</code>
 
 # TODO
-- [ ] Take .seq file or directory of .seq files as input and process all
+- [x] Take .seq file or directory of .seq files as input and process all
 - [ ] Unzip .gz files
 - [ ] Handle multiple file reading and writing asynchronously
-- [ ] Store animo acid and nucleic acid sequences as key value pairs with their accession ids
+- [x] Store animo acid and nucleic acid sequences as key value pairs with their accession ids
 - [ ] Store viral taxanomies independently
 - [ ] Store viral genomic and protein metadata independently
 
