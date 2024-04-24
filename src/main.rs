@@ -68,16 +68,16 @@ fn main() {
                     file_name
                 );
 
-                let (sequences, proteins) = read_and_process_genbank_file(&file_path).unwrap();
+                let (nucleotides, proteins) = read_and_process_genbank_file(&file_path).unwrap();
 
                 println!(
-                    "{} - finished parsing (with {} sequences and {} proteins), writing to disk",
+                    "{} - finished parsing (with {} nucleotides and {} proteins), writing to disk",
                     Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
-                    sequences.len(),
+                    nucleotides.len(),
                     proteins.len()
                 );
 
-                serialize_sequences(&sequences, file_name).expect("Failed to save viral sequences");
+                serialize_nucleotides(&nucleotides, file_name).expect("Failed to save nucleotide sequences");
                 serialize_proteins(&proteins, file_name).expect("Failed to save protein sequences");
 
                 // write_arrow_file(&sequences, "sequences_2.arrow")
@@ -109,16 +109,16 @@ fn find_files_with_extension(dir: &str, ext: &str) -> Vec<PathBuf> {
     files
 }
 
-fn serialize_sequences(
+fn serialize_nucleotides(
     sequences: &[Sequence],
     source_file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let csv_path = format!(
-        "sequences_{}.csv",
+        "nucleotides_{}.csv",
         source_file_name.trim_end_matches(".seq")
     );
     let json_path = format!(
-        "sequences_{}.json",
+        "nucleotides_{}.json",
         source_file_name.trim_end_matches(".seq")
     );
 
