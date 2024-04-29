@@ -13,6 +13,7 @@ serde_json = "1.0"
 memchr = "2.7"
 # rmp-serde = "1.1"
 csv = "1.1"
+flate2 = "1.0"
 
 [dev-dependencies]
 criterion = "0.5"

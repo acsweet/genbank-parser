@@ -1,5 +1,6 @@
 use chrono::Local;
 use csv::WriterBuilder;
+use flate2::read::GzDecoder;
 use genbank_parser;
 use genbank_parser::{
     // faster::parse_new_sequence_record,
@@ -13,16 +14,17 @@ use memchr::memmem;
 use rayon::prelude::*;
 use serde_json::to_writer_pretty;
 use std::env;
-use std::fs;
-use std::fs::File;
-use std::io::BufWriter;
-use std::io::Write;
+use std::fs::{self, File};
+use std::io::prelude::*;
+use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        println!("usage: genbank-parser <path>");
+    let usage_message = "Usage: genbank-parser <path> [--gz]";
+
+    if args.len() < 2 || args.len() > 3 {
+        println!("{}", usage_message);
         return;
     }
 
@@ -35,14 +37,18 @@ fn main() {
     }
 
     let mut file_paths = Vec::new();
-    let extension = "seq";
+    let check_for_gz = args.len() >= 3 && args[2] == "--gz";
+    let extension = if check_for_gz { ".seq.gz" } else { ".seq" };
 
     if path.is_file() {
-        if path.extension().and_then(std::ffi::OsStr::to_str) == Some(extension) {
-            file_paths.push(path.to_path_buf());
-        } else {
-            println!("The file does not have the .{} extension", extension);
-            return;
+        if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
+            if file_name.ends_with(extension) {
+                file_paths.push(path.to_path_buf());
+            } else {
+                println!("The file does not have the {} extension", extension);
+                println!("For .gz files include the --gz argument");
+                return;
+            }
         }
     } else if path.is_dir() {
         file_paths = find_files_with_extension(path_input, extension);
@@ -52,10 +58,10 @@ fn main() {
     }
 
     if file_paths.is_empty() {
-        println!("No .{} files found at the specified path", extension);
+        println!("No {} files found at the specified path", extension);
     } else {
         println!(
-            "Found {} file(s) with .{} extension:",
+            "Found {} file(s) with {} extension:",
             file_paths.len(),
             extension
         );
@@ -77,8 +83,10 @@ fn main() {
                     proteins.len()
                 );
 
-                serialize_nucleotides(&nucleotides, file_name).expect("Failed to save nucleotide sequences");
-                serialize_proteins(&proteins, file_name).expect("Failed to save protein sequences");
+                serialize_nucleotides(&nucleotides, file_name, extension)
+                    .expect("Failed to save nucleotide sequences");
+                serialize_proteins(&proteins, file_name, extension)
+                    .expect("Failed to save protein sequences");
 
                 // write_arrow_file(&sequences, "sequences_2.arrow")
                 //     .expect("Faild to write viral sequences to arrow");
@@ -95,31 +103,32 @@ fn main() {
 }
 
 fn find_files_with_extension(dir: &str, ext: &str) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(std::ffi::OsStr::to_str) == Some(ext) {
-                files.push(path);
-            }
-        }
-    }
-
-    files
+    fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .path()
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .map_or(false, |name| name.ends_with(ext))
+        })
+        .map(|entry| entry.path())
+        .collect()
 }
 
 fn serialize_nucleotides(
     sequences: &[Sequence],
     source_file_name: &str,
+    extension: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let csv_path = format!(
         "nucleotides_{}.csv",
-        source_file_name.trim_end_matches(".seq")
+        source_file_name.trim_end_matches(extension)
     );
     let json_path = format!(
         "nucleotides_{}.json",
-        source_file_name.trim_end_matches(".seq")
+        source_file_name.trim_end_matches(extension)
     );
 
     let json_data: Vec<(String, String)> = sequences
@@ -176,11 +185,15 @@ fn serialize_nucleotides(
 fn serialize_proteins(
     proteins: &[Protein],
     source_file_name: &str,
+    extension: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let csv_path = format!("proteins_{}.csv", source_file_name.trim_end_matches(".seq"));
+    let csv_path = format!(
+        "proteins_{}.csv",
+        source_file_name.trim_end_matches(extension)
+    );
     let json_path = format!(
         "proteins_{}.json",
-        source_file_name.trim_end_matches(".seq")
+        source_file_name.trim_end_matches(extension)
     );
 
     let json_data: Vec<(String, String)> = proteins
@@ -243,10 +256,24 @@ fn chunk_contents_with_memchr<'a>(contents: &'a Vec<u8>) -> Vec<&'a [u8]> {
     records
 }
 
+fn read_or_decompress(file_path: &Path) -> io::Result<Vec<u8>> {
+    if file_path.extension().and_then(std::ffi::OsStr::to_str) == Some("gz") {
+        let file = File::open(file_path)?;
+        let gz_decoder = GzDecoder::new(file);
+        let mut decoder_reader = BufReader::new(gz_decoder);
+        let mut contents = Vec::new();
+        decoder_reader.read_to_end(&mut contents)?;
+        Ok(contents)
+    } else {
+        fs::read(file_path)
+    }
+}
+
 pub fn read_and_process_genbank_file(
     file_path: &PathBuf,
 ) -> std::io::Result<(Vec<Sequence>, Vec<Protein>)> {
-    let contents = fs::read(file_path)?;
+    // let contents = fs::read(file_path)?;
+    let contents = read_or_decompress(file_path)?;
     let records = chunk_contents_with_memchr(&contents);
 
     println!(
