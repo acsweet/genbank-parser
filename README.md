@@ -11,8 +11,8 @@
 - [x] Take .seq file or directory of .seq files as input and process all
 - [ ] Unzip .gz files
 - [ ] Handle multiple file reading and writing asynchronously
-- [x] Store animo acid and nucleic acid sequences as key value pairs with their accession ids
+:white_check_mark: Store animo acid and nucleic acid sequences as key value pairs with their accession ids
 - [ ] Store viral taxanomies independently
-- [ ] Store viral genomic and protein metadata independently
+:white_large_square: Store viral genomic and protein metadata independently
 
 :warning: code could undergo dramatic changes, particularly around outputs
