@@ -15,4 +15,6 @@
 - [ ] Store viral taxanomies independently
 :white_large_square: Store viral genomic and protein metadata independently
 
+:white_check_mark:
+:white_large_square:
 :warning: code could undergo dramatic changes, particularly around outputs
