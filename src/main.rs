@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
-        println!("Usage: cli-tool <path>");
+        println!("usage: genbank-parser <path>");
         return;
     }
 

@@ -284,6 +284,7 @@ where
     Ok(features)
 }
 
+#[inline]
 fn split_at_sequence<'a>(haystack: &'a [u8], needle: &[u8]) -> Option<(&'a [u8], &'a [u8])> {
     if needle.is_empty() {
         return None;
