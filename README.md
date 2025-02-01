@@ -4,7 +4,14 @@
 - see [dev branch](https://github.com/acsweet/genbank-parser/tree/develop) for latest changes
 
 # use
-- build and call e.g. (on mac) <code>.genbank-parser gbvrl1.seq</code>
+- install
+```
+cargo build --release
+```
+- call with `.seq` file
+```
+.genbank-parser gbvrl1.seq
+```
 
 # TODO
 - [ ] Take .seq file or directory of .seq files as input and process all
